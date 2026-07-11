@@ -59,7 +59,27 @@ type MaterialFormData = {
     type: MaterialType;
     status: MaterialStatus;
     material: File | null;
+    upload_path: string;
 };
+
+type DirectUploadsConfig = {
+    enabled: boolean;
+    endpoint: string;
+};
+
+type DirectUpload = {
+    method: 'PUT';
+    url: string;
+    headers: Record<string, string>;
+    path: string;
+    expires_at: string;
+};
+
+type DirectUploadResponse = {
+    upload: DirectUpload;
+};
+
+type ValidationErrors = Record<string, string[]>;
 
 type MaterialFileUploadProps = {
     type: MaterialType;
@@ -67,6 +87,8 @@ type MaterialFileUploadProps = {
     currentFile?: LearningMaterialFormValue;
     error?: string;
     maxUploadMegabytes: number;
+    disabled?: boolean;
+    uploadProgress: number | null;
     onFileChange: (file: File | null) => void;
     onClearError: () => void;
 };
@@ -77,6 +99,7 @@ type MaterialFormProps = {
     categories: CategoryOption[];
     types: MaterialType[];
     maxUploadMegabytes: number;
+    directUploads: DirectUploadsConfig;
     material?: LearningMaterialFormValue;
 };
 
@@ -84,6 +107,7 @@ type Props = {
     categories: CategoryOption[];
     types: MaterialType[];
     maxUploadMegabytes: number;
+    directUploads: DirectUploadsConfig;
 };
 
 const acceptByType: Record<MaterialType, string> = {
@@ -129,12 +153,139 @@ function formatFileSize(bytes: number) {
     return `${size.toFixed(size >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
 }
 
+class DirectUploadError extends Error {
+    errors: ValidationErrors;
+
+    constructor(message: string, errors: ValidationErrors = {}) {
+        super(message);
+        this.name = 'DirectUploadError';
+        this.errors = errors;
+    }
+}
+
+function csrfToken() {
+    return (
+        document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')
+            ?.content ?? ''
+    );
+}
+
+function firstValidationMessage(
+    errors: ValidationErrors | undefined,
+    fallback: string,
+) {
+    if (!errors) {
+        return fallback;
+    }
+
+    for (const messages of Object.values(errors)) {
+        if (messages[0]) {
+            return messages[0];
+        }
+    }
+
+    return fallback;
+}
+
+async function requestDirectUpload(
+    endpoint: string,
+    file: File,
+    categoryId: string,
+    type: MaterialType,
+) {
+    const response = await fetch(endpoint, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': csrfToken(),
+        },
+        body: JSON.stringify({
+            category_id: categoryId,
+            type,
+            file_name: file.name,
+            mime_type: file.type || null,
+            size_bytes: file.size,
+        }),
+    });
+
+    const payload = (await response.json().catch(() => null)) as
+        | (Partial<DirectUploadResponse> & {
+              message?: string;
+              errors?: ValidationErrors;
+          })
+        | null;
+
+    if (!response.ok || !payload?.upload) {
+        throw new DirectUploadError(
+            payload?.message ??
+                firstValidationMessage(
+                    payload?.errors,
+                    'The material upload could not be prepared.',
+                ),
+            payload?.errors,
+        );
+    }
+
+    return payload.upload;
+}
+
+function uploadDirectlyToStorage(
+    upload: DirectUpload,
+    file: File,
+    onProgress: (progress: number) => void,
+) {
+    return new Promise<void>((resolve, reject) => {
+        const request = new XMLHttpRequest();
+
+        request.open(upload.method, upload.url, true);
+
+        Object.entries(upload.headers).forEach(([name, value]) => {
+            request.setRequestHeader(name, value);
+        });
+
+        request.upload.onprogress = (event) => {
+            if (event.lengthComputable) {
+                onProgress(Math.round((event.loaded / event.total) * 100));
+            }
+        };
+
+        request.onload = () => {
+            if (request.status >= 200 && request.status < 300) {
+                onProgress(100);
+                resolve();
+
+                return;
+            }
+
+            reject(
+                new DirectUploadError(
+                    'The material failed to upload to storage.',
+                ),
+            );
+        };
+
+        request.onerror = () => {
+            reject(
+                new DirectUploadError(
+                    'The material failed to upload to storage.',
+                ),
+            );
+        };
+
+        request.send(file);
+    });
+}
+
 function MaterialFileUpload({
     type,
     selectedFile,
     currentFile,
     error,
     maxUploadMegabytes,
+    disabled = false,
+    uploadProgress,
     onFileChange,
     onClearError,
 }: MaterialFileUploadProps) {
@@ -148,15 +299,18 @@ function MaterialFileUpload({
     const fileSize = selectedFile
         ? formatFileSize(selectedFile.size)
         : currentFile?.size_formatted;
+    const isUploading = uploadProgress !== null && uploadProgress < 100;
 
     return (
         <div className="space-y-3">
             <button
                 type="button"
+                disabled={disabled}
                 onClick={() => inputRef.current?.click()}
                 className={cn(
                     'group flex min-h-56 w-full flex-col items-center justify-center gap-4 rounded-lg border border-dashed bg-muted/30 p-6 text-center transition hover:border-primary/50 hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none',
                     displayError && 'border-destructive',
+                    disabled && 'cursor-not-allowed opacity-75',
                 )}
             >
                 <span className="flex size-14 items-center justify-center rounded-full border bg-background text-muted-foreground transition group-hover:text-foreground">
@@ -179,13 +333,24 @@ function MaterialFileUpload({
                 </span>
 
                 <Badge variant="outline">
-                    {selectedFile
-                        ? 'Ready to upload'
-                        : currentFile
-                          ? 'Current file'
-                          : typeLabel(type)}
+                    {isUploading
+                        ? `Uploading ${uploadProgress}%`
+                        : selectedFile
+                          ? 'Ready to upload'
+                          : currentFile
+                            ? 'Current file'
+                            : typeLabel(type)}
                 </Badge>
             </button>
+
+            {uploadProgress !== null && (
+                <div className="h-2 overflow-hidden rounded-full bg-muted">
+                    <div
+                        className="h-full rounded-full bg-primary transition-all"
+                        style={{ width: `${uploadProgress}%` }}
+                    />
+                </div>
+            )}
 
             <div className="space-y-1 text-sm text-muted-foreground">
                 <p>{typeHelp(type)}</p>
@@ -197,6 +362,7 @@ function MaterialFileUpload({
                 name="material"
                 className="sr-only"
                 accept={acceptByType[type]}
+                disabled={disabled}
                 onChange={(event) => {
                     const file = event.target.files?.[0] ?? null;
 
@@ -234,10 +400,12 @@ export function MaterialForm({
     categories,
     types,
     maxUploadMegabytes,
+    directUploads,
     material,
 }: MaterialFormProps) {
     const isEdit = mode === 'edit';
     const [submitting, setSubmitting] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState<number | null>(null);
     const { data, setData, errors, clearErrors, reset, setError } =
         useForm<MaterialFormData>({
             _method: isEdit ? 'PUT' : undefined,
@@ -250,28 +418,27 @@ export function MaterialForm({
             type: material?.type ?? 'video',
             status: material?.status ?? 'draft',
             material: null,
+            upload_path: '',
         });
 
-    const submit = (event: FormEvent<HTMLFormElement>) => {
-        event.preventDefault();
-
-        const formData = new FormData();
+    const submitFallback = () => {
+        const payload = new FormData();
 
         if (isEdit) {
-            formData.set('_method', 'PUT');
+            payload.set('_method', 'PUT');
         }
 
-        formData.set('category_id', data.category_id);
-        formData.set('title', data.title);
-        formData.set('description', data.description);
-        formData.set('type', data.type);
-        formData.set('status', data.status);
+        payload.set('category_id', data.category_id);
+        payload.set('title', data.title);
+        payload.set('description', data.description);
+        payload.set('type', data.type);
+        payload.set('status', data.status);
 
         if (data.material) {
-            formData.set('material', data.material);
+            payload.set('material', data.material);
         }
 
-        router.post(action, formData, {
+        router.post(action, payload, {
             forceFormData: true,
             preserveScroll: true,
             onStart: () => {
@@ -290,6 +457,106 @@ export function MaterialForm({
             },
             onFinish: () => setSubmitting(false),
         });
+    };
+
+    const submitMetadata = (uploadPath?: string) => {
+        const payload: Record<string, string> = {
+            category_id: data.category_id,
+            title: data.title,
+            description: data.description,
+            type: data.type,
+            status: data.status,
+        };
+
+        if (isEdit) {
+            payload._method = 'PUT';
+        }
+
+        if (uploadPath) {
+            payload.upload_path = uploadPath;
+        }
+
+        router.post(action, payload, {
+            preserveScroll: true,
+            onStart: () => {
+                clearErrors();
+                setSubmitting(true);
+            },
+            onError: (nextErrors) => setError(nextErrors),
+            onSuccess: () => {
+                if (isEdit) {
+                    reset('material', 'upload_path');
+
+                    return;
+                }
+
+                reset();
+            },
+            onFinish: () => {
+                setSubmitting(false);
+                setUploadProgress(null);
+            },
+        });
+    };
+
+    const applyDirectUploadError = (error: unknown) => {
+        const message =
+            error instanceof Error
+                ? error.message
+                : 'The material failed to upload.';
+        const validationErrors =
+            error instanceof DirectUploadError ? error.errors : {};
+
+        if (validationErrors.category_id?.[0]) {
+            setError('category_id', validationErrors.category_id[0]);
+        }
+
+        if (validationErrors.type?.[0]) {
+            setError('type', validationErrors.type[0]);
+        }
+
+        setError(
+            'material',
+            validationErrors.material?.[0] ??
+                validationErrors.file_name?.[0] ??
+                validationErrors.mime_type?.[0] ??
+                validationErrors.size_bytes?.[0] ??
+                message,
+        );
+    };
+
+    const submit = async (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        clearErrors();
+
+        if (!directUploads.enabled || !data.material) {
+            submitFallback();
+
+            return;
+        }
+
+        setSubmitting(true);
+        setUploadProgress(0);
+
+        try {
+            const upload = await requestDirectUpload(
+                directUploads.endpoint,
+                data.material,
+                data.category_id,
+                data.type,
+            );
+
+            await uploadDirectlyToStorage(upload, data.material, (progress) =>
+                setUploadProgress(progress),
+            );
+
+            setData('upload_path', upload.path);
+            submitMetadata(upload.path);
+        } catch (error) {
+            setSubmitting(false);
+            setUploadProgress(null);
+            applyDirectUploadError(error);
+        }
     };
 
     return (
@@ -443,6 +710,8 @@ export function MaterialForm({
                             currentFile={material}
                             error={errors.material}
                             maxUploadMegabytes={maxUploadMegabytes}
+                            disabled={submitting}
+                            uploadProgress={uploadProgress}
                             onFileChange={(file) => setData('material', file)}
                             onClearError={() => clearErrors('material')}
                         />
@@ -475,6 +744,7 @@ export default function CreateLearningMaterial({
     categories,
     types,
     maxUploadMegabytes,
+    directUploads,
 }: Props) {
     return (
         <>
@@ -514,6 +784,7 @@ export default function CreateLearningMaterial({
                         categories={categories}
                         types={types}
                         maxUploadMegabytes={maxUploadMegabytes}
+                        directUploads={directUploads}
                     />
                 )}
             </div>

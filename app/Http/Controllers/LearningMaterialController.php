@@ -4,9 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Models\Category;
 use App\Models\LearningMaterial;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Number;
 use Illuminate\Support\Str;
@@ -15,10 +17,15 @@ use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 use RuntimeException;
+use Throwable;
 
 class LearningMaterialController extends Controller
 {
     private const MAX_UPLOAD_KB = 512000;
+
+    private const DIRECT_UPLOAD_SESSION_KEY = 'learning_material_uploads';
+
+    private const DIRECT_UPLOAD_EXPIRES_MINUTES = 30;
 
     private const EXTENSIONS = [
         'video' => ['mp4', 'm4v', 'mov', 'webm', 'ogg'],
@@ -86,6 +93,7 @@ class LearningMaterialController extends Controller
             'categories' => $this->categoryOptions(),
             'types' => LearningMaterial::TYPES,
             'maxUploadMegabytes' => (int) floor(self::MAX_UPLOAD_KB / 1024),
+            'directUploads' => $this->directUploadProps(),
         ]);
     }
 
@@ -109,6 +117,72 @@ class LearningMaterialController extends Controller
             'categories' => $this->categoryOptions($learningMaterial->category),
             'types' => LearningMaterial::TYPES,
             'maxUploadMegabytes' => (int) floor(self::MAX_UPLOAD_KB / 1024),
+            'directUploads' => $this->directUploadProps(),
+        ]);
+    }
+
+    /**
+     * Create a temporary URL so the browser can upload the selected file directly.
+     */
+    public function prepareUpload(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'category_id' => ['required', 'integer', Rule::exists(Category::class, 'id')],
+            'type' => ['required', Rule::in(LearningMaterial::TYPES)],
+            'file_name' => ['required', 'string', 'max:255'],
+            'mime_type' => ['nullable', 'string', 'max:255'],
+            'size_bytes' => ['required', 'integer', 'min:1', 'max:'.$this->maxUploadBytes()],
+        ]);
+
+        $category = $this->findCategory((int) $validated['category_id']);
+        $type = (string) $validated['type'];
+        $originalName = (string) $validated['file_name'];
+        $mimeType = filled($validated['mime_type'] ?? null) ? (string) $validated['mime_type'] : null;
+        $extension = $this->extensionFromFileName($originalName);
+
+        $this->validateMaterialFileMetadata($extension, $mimeType, $type);
+
+        $diskName = $this->mediaDiskName();
+        $disk = Storage::disk($diskName);
+
+        if (! $disk->providesTemporaryUploadUrls()) {
+            throw ValidationException::withMessages([
+                'material' => __('Direct uploads are available only for disks that support temporary upload URLs.'),
+            ]);
+        }
+
+        $path = $this->materialPath($category, $type, $extension);
+        $expiresAt = now()->addMinutes(self::DIRECT_UPLOAD_EXPIRES_MINUTES);
+        $options = $mimeType ? ['ContentType' => $mimeType] : [];
+
+        try {
+            $temporaryUpload = $disk->temporaryUploadUrl($path, $expiresAt, $options);
+        } catch (RuntimeException) {
+            throw ValidationException::withMessages([
+                'material' => __('The material upload URL could not be created. Please try again.'),
+            ]);
+        }
+
+        $request->session()->put($this->directUploadSessionKey($path), [
+            'disk' => $diskName,
+            'path' => $path,
+            'category_id' => $category->id,
+            'type' => $type,
+            'original_name' => $originalName,
+            'mime_type' => $mimeType,
+            'extension' => $extension,
+            'size_bytes' => (int) $validated['size_bytes'],
+            'expires_at' => $expiresAt->toISOString(),
+        ]);
+
+        return response()->json([
+            'upload' => [
+                'method' => 'PUT',
+                'url' => (string) $temporaryUpload['url'],
+                'headers' => $this->uploadHeaders($temporaryUpload['headers'] ?? []),
+                'path' => $path,
+                'expires_at' => $expiresAt->toISOString(),
+            ],
         ]);
     }
 
@@ -119,18 +193,26 @@ class LearningMaterialController extends Controller
     {
         $validated = $request->validate($this->rules());
         $file = $request->file('material');
+        $uploadPath = (string) ($validated['upload_path'] ?? '');
+        $hasDirectUpload = $uploadPath !== '';
 
-        if (! $file instanceof UploadedFile || ! $file->isValid()) {
+        if (! $hasDirectUpload && ! ($file instanceof UploadedFile)) {
             throw ValidationException::withMessages([
                 'material' => __('Choose a valid video, PDF, or audiobook file.'),
             ]);
         }
 
-        $this->validateMaterialFile($file, $validated['type']);
+        if ($file instanceof UploadedFile && ! $file->isValid()) {
+            throw ValidationException::withMessages([
+                'material' => __('Choose a valid video, PDF, or audiobook file.'),
+            ]);
+        }
 
         $category = $this->findCategory((int) $validated['category_id']);
-        $disk = (string) config('lms.media_disk', 'public');
-        $storedFile = $this->storeMaterialFile($file, $category, $validated['type'], $disk);
+        $disk = $this->mediaDiskName();
+        $storedFile = $hasDirectUpload
+            ? $this->directUploadedFile($request, $uploadPath, $category, $validated['type'], $disk)
+            : $this->storeUploadedFile($file, $category, $validated['type'], $disk);
 
         LearningMaterial::query()->create([
             'category_id' => $category->id,
@@ -143,6 +225,10 @@ class LearningMaterialController extends Controller
             ...$storedFile,
             'published_at' => $validated['status'] === 'published' ? now() : null,
         ]);
+
+        if ($hasDirectUpload) {
+            $this->forgetDirectUpload($request, $uploadPath);
+        }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Learning material uploaded.')]);
 
@@ -157,8 +243,11 @@ class LearningMaterialController extends Controller
         $validated = $request->validate($this->rules(updating: true));
         $file = $request->file('material');
         $hasReplacementFile = $file instanceof UploadedFile && $file->isValid();
+        $uploadPath = (string) ($validated['upload_path'] ?? '');
+        $hasDirectReplacement = $uploadPath !== '';
+        $hasReplacement = $hasReplacementFile || $hasDirectReplacement;
 
-        if ($validated['type'] !== $learningMaterial->type && ! $hasReplacementFile) {
+        if ($validated['type'] !== $learningMaterial->type && ! $hasReplacement) {
             throw ValidationException::withMessages([
                 'material' => __('Upload a replacement file when changing the material type.'),
             ]);
@@ -183,21 +272,26 @@ class LearningMaterialController extends Controller
                 : null,
         ];
 
-        if ($hasReplacementFile) {
-            $this->validateMaterialFile($file, $validated['type']);
-
+        if ($hasReplacement) {
             $oldDisk = $learningMaterial->disk;
             $oldPath = $learningMaterial->path;
-            $disk = (string) config('lms.media_disk', 'public');
+            $disk = $this->mediaDiskName();
+            $storedFile = $hasDirectReplacement
+                ? $this->directUploadedFile($request, $uploadPath, $category, $validated['type'], $disk)
+                : $this->storeUploadedFile($file, $category, $validated['type'], $disk);
 
             $attributes = [
                 ...$attributes,
                 'disk' => $disk,
-                ...$this->storeMaterialFile($file, $category, $validated['type'], $disk),
+                ...$storedFile,
             ];
 
             $learningMaterial->fill($attributes)->save();
             Storage::disk($oldDisk)->delete($oldPath);
+
+            if ($hasDirectReplacement) {
+                $this->forgetDirectUpload($request, $uploadPath);
+            }
         } else {
             $learningMaterial->update($attributes);
         }
@@ -245,7 +339,8 @@ class LearningMaterialController extends Controller
             'description' => ['nullable', 'string', 'max:2000'],
             'type' => ['required', Rule::in(LearningMaterial::TYPES)],
             'status' => ['required', Rule::in(LearningMaterial::STATUSES)],
-            'material' => [$updating ? 'nullable' : 'required', 'file', 'max:'.self::MAX_UPLOAD_KB],
+            'material' => ['nullable', 'file', 'max:'.self::MAX_UPLOAD_KB],
+            'upload_path' => ['nullable', 'string', 'max:1024'],
         ];
     }
 
@@ -266,6 +361,26 @@ class LearningMaterialController extends Controller
         }
     }
 
+    private function validateMaterialFileMetadata(string $extension, ?string $mimeType, string $type): void
+    {
+        if ($extension === '') {
+            throw ValidationException::withMessages([
+                'material' => __('Choose a file that has a supported extension.'),
+            ]);
+        }
+
+        $extensionAllowed = in_array($extension, self::EXTENSIONS[$type] ?? [], true);
+        $mimeAllowed = $mimeType !== null && collect(self::MIME_PREFIXES[$type] ?? [])->contains(function (string $allowed) use ($mimeType) {
+            return str_ends_with($allowed, '/') ? str_starts_with($mimeType, $allowed) : $mimeType === $allowed;
+        });
+
+        if (! $extensionAllowed && ! $mimeAllowed) {
+            throw ValidationException::withMessages([
+                'material' => __('Choose a file that matches the selected material type.'),
+            ]);
+        }
+    }
+
     private function findCategory(int $id): Category
     {
         return Category::query()
@@ -276,29 +391,96 @@ class LearningMaterialController extends Controller
     /**
      * @return array{path: string, original_name: string, mime_type: string|null, extension: string, size_bytes: int}
      */
-    private function storeMaterialFile(UploadedFile $file, Category $category, string $type, string $disk): array
+    private function storeUploadedFile(?UploadedFile $file, Category $category, string $type, string $disk): array
     {
+        if (! $file instanceof UploadedFile) {
+            throw ValidationException::withMessages([
+                'material' => __('Choose a valid video, PDF, or audiobook file.'),
+            ]);
+        }
+
+        $this->validateMaterialFile($file, $type);
+
         $extension = strtolower($file->getClientOriginalExtension() ?: $file->extension() ?: '');
 
         if (! in_array($extension, self::EXTENSIONS[$type], true)) {
             $extension = $file->guessExtension() ?: $type;
         }
 
-        $directory = "learning-materials/{$category->slug}/{$type}";
-        $path = $file->storeAs($directory, Str::uuid().'.'.$extension, $disk);
+        $path = $this->materialPath($category, $type, $extension);
+        $storedPath = $file->storeAs(dirname($path), basename($path), $disk);
 
-        if ($path === false) {
+        if ($storedPath === false) {
             throw ValidationException::withMessages([
                 'material' => __('The material could not be uploaded. Please try again.'),
             ]);
         }
 
         return [
-            'path' => $path,
+            'path' => $storedPath,
             'original_name' => $file->getClientOriginalName(),
             'mime_type' => $file->getMimeType() ?: $file->getClientMimeType(),
             'extension' => $extension,
             'size_bytes' => $file->getSize() ?: 0,
+        ];
+    }
+
+    /**
+     * @return array{path: string, original_name: string, mime_type: string|null, extension: string, size_bytes: int}
+     */
+    private function directUploadedFile(Request $request, string $path, Category $category, string $type, string $disk): array
+    {
+        $intent = $request->session()->get($this->directUploadSessionKey($path));
+
+        if (! is_array($intent)) {
+            throw ValidationException::withMessages([
+                'material' => __('Upload the selected file again before saving this material.'),
+            ]);
+        }
+
+        $expiresAt = $this->directUploadExpiresAt($intent['expires_at'] ?? null);
+        $expectedSize = (int) ($intent['size_bytes'] ?? 0);
+
+        if (
+            $expiresAt === null
+            || now()->greaterThan($expiresAt)
+            || ($intent['disk'] ?? null) !== $disk
+            || (int) ($intent['category_id'] ?? 0) !== $category->id
+            || ($intent['type'] ?? null) !== $type
+            || ($intent['path'] ?? null) !== $path
+            || ! Str::startsWith($path, "learning-materials/{$category->slug}/{$type}/")
+        ) {
+            throw ValidationException::withMessages([
+                'material' => __('Upload the selected file again before saving this material.'),
+            ]);
+        }
+
+        try {
+            $storage = Storage::disk($disk);
+
+            if (! $storage->exists($path)) {
+                throw new RuntimeException('Missing direct upload object.');
+            }
+
+            $actualSize = (int) $storage->size($path);
+        } catch (Throwable) {
+            throw ValidationException::withMessages([
+                'material' => __('The uploaded file was not found in storage. Please upload it again.'),
+            ]);
+        }
+
+        if ($expectedSize > 0 && $actualSize !== $expectedSize) {
+            throw ValidationException::withMessages([
+                'material' => __('The uploaded file size changed. Please upload it again.'),
+            ]);
+        }
+
+        return [
+            'path' => $path,
+            'original_name' => (string) $intent['original_name'],
+            'mime_type' => filled($intent['mime_type'] ?? null) ? (string) $intent['mime_type'] : null,
+            'extension' => (string) $intent['extension'],
+            'size_bytes' => $actualSize,
         ];
     }
 
@@ -335,6 +517,85 @@ class LearningMaterialController extends Controller
         } catch (RuntimeException) {
             return $disk->url($material->path);
         }
+    }
+
+    private function mediaDiskName(): string
+    {
+        return (string) config('lms.media_disk', 'public');
+    }
+
+    private function maxUploadBytes(): int
+    {
+        return self::MAX_UPLOAD_KB * 1024;
+    }
+
+    private function materialPath(Category $category, string $type, string $extension): string
+    {
+        return "learning-materials/{$category->slug}/{$type}/".Str::uuid().'.'.$extension;
+    }
+
+    private function extensionFromFileName(string $fileName): string
+    {
+        return strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+    }
+
+    private function directUploadSessionKey(string $path): string
+    {
+        return self::DIRECT_UPLOAD_SESSION_KEY.'.'.sha1($path);
+    }
+
+    private function forgetDirectUpload(Request $request, string $path): void
+    {
+        $request->session()->forget($this->directUploadSessionKey($path));
+    }
+
+    private function directUploadExpiresAt(mixed $expiresAt): ?Carbon
+    {
+        if (! is_string($expiresAt) || $expiresAt === '') {
+            return null;
+        }
+
+        try {
+            return Carbon::parse($expiresAt);
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * @return array{enabled: bool, endpoint: string}
+     */
+    private function directUploadProps(): array
+    {
+        return [
+            'enabled' => Storage::disk($this->mediaDiskName())->providesTemporaryUploadUrls(),
+            'endpoint' => route('learning-materials.uploads.store', absolute: false),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $headers
+     * @return array<string, string>
+     */
+    private function uploadHeaders(array $headers): array
+    {
+        $normalized = [];
+
+        foreach ($headers as $name => $value) {
+            if (strtolower((string) $name) === 'host') {
+                continue;
+            }
+
+            $headerValue = is_array($value)
+                ? implode(', ', array_map('strval', $value))
+                : (string) $value;
+
+            if ($headerValue !== '') {
+                $normalized[(string) $name] = $headerValue;
+            }
+        }
+
+        return $normalized;
     }
 
     /**

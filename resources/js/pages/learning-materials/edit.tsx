@@ -12,6 +12,10 @@ type Props = {
     categories: CategoryOption[];
     types: MaterialType[];
     maxUploadMegabytes: number;
+    directUploads: {
+        enabled: boolean;
+        endpoint: string;
+    };
 };
 
 export default function EditLearningMaterial({
@@ -19,6 +23,7 @@ export default function EditLearningMaterial({
     categories,
     types,
     maxUploadMegabytes,
+    directUploads,
 }: Props) {
     return (
         <>
@@ -41,6 +46,7 @@ export default function EditLearningMaterial({
                     categories={categories}
                     types={types}
                     maxUploadMegabytes={maxUploadMegabytes}
+                    directUploads={directUploads}
                 />
             </div>
         </>

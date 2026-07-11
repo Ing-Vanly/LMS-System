@@ -96,6 +96,81 @@ test('authenticated users can upload learning materials by type', function (stri
     'audiobook' => ['audiobook', 'lesson.mp3', 'audio/mpeg'],
 ]);
 
+test('authenticated users can save learning materials after direct storage upload', function () {
+    Storage::fake('public');
+    config(['lms.media_disk' => 'public']);
+
+    $user = User::factory()->create();
+    $category = Category::factory()->create();
+    $path = "learning-materials/{$category->slug}/pdf/direct-upload.pdf";
+    $contents = 'direct pdf contents';
+
+    Storage::disk('public')->put($path, $contents);
+
+    $this->actingAs($user);
+
+    $sessionKey = sha1($path);
+
+    $this->withSession([
+        'learning_material_uploads' => [
+            $sessionKey => [
+                'disk' => 'public',
+                'path' => $path,
+                'category_id' => $category->id,
+                'type' => 'pdf',
+                'original_name' => 'direct-upload.pdf',
+                'mime_type' => 'application/pdf',
+                'extension' => 'pdf',
+                'size_bytes' => strlen($contents),
+                'expires_at' => now()->addMinutes(10)->toISOString(),
+            ],
+        ],
+    ])->post(route('learning-materials.store'), [
+        'category_id' => $category->id,
+        'title' => 'Direct upload PDF',
+        'description' => 'Uploaded directly to storage first.',
+        'type' => 'pdf',
+        'status' => 'published',
+        'upload_path' => $path,
+    ])->assertRedirect(route('learning-materials.index', absolute: false))
+        ->assertSessionMissing("learning_material_uploads.{$sessionKey}");
+
+    $material = LearningMaterial::query()
+        ->where('title', 'Direct upload PDF')
+        ->firstOrFail();
+
+    expect($material->path)->toBe($path)
+        ->and($material->original_name)->toBe('direct-upload.pdf')
+        ->and($material->size_bytes)->toBe(strlen($contents));
+});
+
+test('direct upload preparation returns a storage upload intent', function () {
+    Storage::fake('public');
+    config(['lms.media_disk' => 'public']);
+
+    $user = User::factory()->create();
+    $category = Category::factory()->create();
+
+    $this->actingAs($user);
+
+    $response = $this->postJson(route('learning-materials.uploads.store'), [
+        'category_id' => $category->id,
+        'type' => 'pdf',
+        'file_name' => 'lesson.pdf',
+        'mime_type' => 'application/pdf',
+        'size_bytes' => 1024,
+    ])->assertOk()
+        ->assertJsonStructure([
+            'upload' => ['method', 'url', 'headers', 'path', 'expires_at'],
+        ]);
+
+    $path = $response->json('upload.path');
+
+    expect($path)->toStartWith("learning-materials/{$category->slug}/pdf/");
+
+    $this->assertTrue(session()->has('learning_material_uploads.'.sha1((string) $path)));
+});
+
 test('categories with learning materials cannot be deleted', function () {
     $user = User::factory()->create();
     $category = Category::factory()->create();

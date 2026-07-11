@@ -10,6 +10,8 @@ Route::inertia('/', 'welcome')->name('home');
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::inertia('dashboard', 'dashboard')->name('dashboard');
     Route::resource('categories', CategoryController::class)->except('show');
+    Route::post('learning-materials/uploads', [::class, 'prepareUpload'])
+        ->name('learning-materials.uploads.store');
     Route::get('learning-materials/{learning_material}/preview', [LearningMaterialController::class, 'preview'])
         ->name('learning-materials.preview');
     Route::resource('learning-materials', LearningMaterialController::class)
