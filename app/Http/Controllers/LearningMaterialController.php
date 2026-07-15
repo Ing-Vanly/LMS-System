@@ -85,6 +85,48 @@ class LearningMaterialController extends Controller
     }
 
     /**
+     * Display published learning materials in a student-facing test library.
+     */
+    public function library(Request $request): Response
+    {
+        $search = $request->string('search')->toString();
+        $type = $request->string('type', 'all')->toString();
+        $categoryId = $request->integer('category');
+
+        return Inertia::render('learning-library/index', [
+            'materials' => LearningMaterial::query()
+                ->with('category')
+                ->where('status', 'published')
+                ->when($search !== '', function ($query) use ($search) {
+                    $query->where(function ($query) use ($search) {
+                        $query
+                            ->where('title', 'like', "%{$search}%")
+                            ->orWhere('description', 'like', "%{$search}%")
+                            ->orWhere('original_name', 'like', "%{$search}%");
+                    });
+                })
+                ->when(in_array($type, LearningMaterial::TYPES, true), function ($query) use ($type) {
+                    $query->where('type', $type);
+                })
+                ->when($categoryId > 0, function ($query) use ($categoryId) {
+                    $query->where('category_id', $categoryId);
+                })
+                ->latest('published_at')
+                ->latest()
+                ->get()
+                ->map(fn (LearningMaterial $material): array => $this->materialPayload($material))
+                ->all(),
+            'categories' => $this->categoryOptions(),
+            'filters' => [
+                'search' => $search,
+                'type' => in_array($type, LearningMaterial::TYPES, true) ? $type : 'all',
+                'category' => $categoryId > 0 ? $categoryId : null,
+            ],
+            'types' => LearningMaterial::TYPES,
+        ]);
+    }
+
+    /**
      * Show the upload form.
      */
     public function create(): Response

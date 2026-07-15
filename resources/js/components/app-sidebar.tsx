@@ -4,6 +4,7 @@ import {
     FolderOpen,
     LayoutGrid,
     LibraryBig,
+    MonitorPlay,
     UserRound,
     Users,
 } from 'lucide-react';
@@ -55,6 +56,11 @@ const mainNavItems: NavItem[] = [
                 title: 'Learning Materials',
                 href: '/learning-materials',
                 icon: LibraryBig,
+            },
+            {
+                title: 'Learning Library',
+                href: '/learning-library',
+                icon: MonitorPlay,
             },
         ],
     },
