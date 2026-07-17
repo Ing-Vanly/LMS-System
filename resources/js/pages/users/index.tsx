@@ -51,6 +51,7 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { create, destroy, edit, index } from '@/routes/users';
+import type { RoleName } from './create';
 
 type ManagedUser = {
     id: number;
@@ -58,6 +59,7 @@ type ManagedUser = {
     email: string;
     phone: string | null;
     status: 'active' | 'inactive';
+    role: RoleName | null;
     avatar: string | null;
     is_current: boolean;
 };
@@ -196,7 +198,7 @@ export default function UsersIndex({ users, filters, defaultAvatar }: Props) {
                     </Select>
                 </div>
 
-                <Card className="gap-0 overflow-hidden rounded-lg py-0">
+                <Card className="gap-0 overflow-hidden rounded-lg py-0 shadow-none">
                     <CardHeader className="py-5">
                         <CardTitle>User list</CardTitle>
                         <CardDescription>
@@ -210,6 +212,7 @@ export default function UsersIndex({ users, filters, defaultAvatar }: Props) {
                                     <TableHead className="pl-6">User</TableHead>
                                     <TableHead>Email</TableHead>
                                     <TableHead>Phone</TableHead>
+                                    <TableHead>Role</TableHead>
                                     <TableHead>Status</TableHead>
                                     <TableHead className="pr-6 text-right">
                                         Actions
@@ -220,7 +223,7 @@ export default function UsersIndex({ users, filters, defaultAvatar }: Props) {
                                 {users.data.length === 0 && (
                                     <TableRow>
                                         <TableCell
-                                            colSpan={5}
+                                            colSpan={6}
                                             className="h-32 text-center text-muted-foreground"
                                         >
                                             No users found.
@@ -268,6 +271,20 @@ export default function UsersIndex({ users, filters, defaultAvatar }: Props) {
                                         </TableCell>
                                         <TableCell className="text-muted-foreground">
                                             {user.phone || 'N/A'}
+                                        </TableCell>
+                                        <TableCell>
+                                            {user.role ? (
+                                                <Badge
+                                                    variant="outline"
+                                                    className="capitalize"
+                                                >
+                                                    {user.role}
+                                                </Badge>
+                                            ) : (
+                                                <span className="text-muted-foreground">
+                                                    Unassigned
+                                                </span>
+                                            )}
                                         </TableCell>
                                         <TableCell>
                                             <div className="flex flex-wrap gap-2">

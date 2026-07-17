@@ -16,21 +16,30 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        $this->call(RolePermissionSeeder::class);
+
         $password = Hash::make('password');
 
         $users = [
             [
                 'name' => 'Admin',
                 'email' => 'admin@gmail.com',
+                'role' => 'admin',
+            ],
+            [
+                'name' => 'Professor',
+                'email' => 'professor@gmail.com',
+                'role' => 'professor',
             ],
             [
                 'name' => 'User',
                 'email' => 'user@gmail.com',
+                'role' => 'user',
             ],
         ];
 
         foreach ($users as $user) {
-            User::query()->updateOrCreate(
+            $createdUser = User::query()->updateOrCreate(
                 ['email' => $user['email']],
                 [
                     'name' => $user['name'],
@@ -38,6 +47,8 @@ class DatabaseSeeder extends Seeder
                     'password' => $password,
                 ],
             );
+
+            $createdUser->syncRoles([$user['role']]);
         }
 
         $this->call(LmsContentSeeder::class);

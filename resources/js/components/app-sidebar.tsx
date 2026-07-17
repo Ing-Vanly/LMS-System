@@ -4,7 +4,9 @@ import {
     FolderOpen,
     LayoutGrid,
     LibraryBig,
+    KeyRound,
     MonitorPlay,
+    Shield,
     UserRound,
     Users,
 } from 'lucide-react';
@@ -39,6 +41,16 @@ const mainNavItems: NavItem[] = [
                 title: 'Users',
                 href: usersIndex(),
                 icon: UserRound,
+            },
+            {
+                title: 'Roles',
+                href: '/roles',
+                icon: Shield,
+            },
+            {
+                title: 'Permissions',
+                href: '/permissions',
+                icon: KeyRound,
             },
         ],
     },

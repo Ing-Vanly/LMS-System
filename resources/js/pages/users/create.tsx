@@ -26,12 +26,15 @@ import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 import { create, index, store } from '@/routes/users';
 
+export type RoleName = string;
+
 export type ManagedUserFormValue = {
     id: number;
     name: string;
     email: string;
     phone: string | null;
     status: 'active' | 'inactive';
+    role: RoleName | null;
     avatar: string | null;
 };
 
@@ -39,6 +42,7 @@ type UserFormProps = {
     mode: 'create' | 'edit';
     action: string;
     defaultAvatar: string;
+    roles: RoleName[];
     user?: ManagedUserFormValue;
 };
 
@@ -48,6 +52,7 @@ type UserFormData = {
     email: string;
     phone: string;
     status: 'active' | 'inactive';
+    role: RoleName;
     password: string;
     password_confirmation: string;
     avatar: File | null;
@@ -62,6 +67,7 @@ type AvatarUploadProps = {
 
 type Props = {
     defaultAvatar: string;
+    roles: RoleName[];
 };
 
 function AvatarUpload({
@@ -163,7 +169,13 @@ function AvatarUpload({
     );
 }
 
-export function UserForm({ mode, action, defaultAvatar, user }: UserFormProps) {
+export function UserForm({
+    mode,
+    action,
+    defaultAvatar,
+    roles,
+    user,
+}: UserFormProps) {
     const isEdit = mode === 'edit';
     const [submitting, setSubmitting] = useState(false);
     const { data, setData, errors, clearErrors, reset, setError } =
@@ -173,6 +185,7 @@ export function UserForm({ mode, action, defaultAvatar, user }: UserFormProps) {
             email: user?.email ?? '',
             phone: user?.phone ?? '',
             status: user?.status ?? 'active',
+            role: user?.role ?? 'user',
             password: '',
             password_confirmation: '',
             avatar: null,
@@ -191,6 +204,7 @@ export function UserForm({ mode, action, defaultAvatar, user }: UserFormProps) {
         formData.set('email', data.email);
         formData.set('phone', data.phone);
         formData.set('status', data.status);
+        formData.set('role', data.role);
 
         const selectedAvatar = data.avatar ?? formData.get('avatar');
 
@@ -236,6 +250,7 @@ export function UserForm({ mode, action, defaultAvatar, user }: UserFormProps) {
         >
             {isEdit && <input type="hidden" name="_method" value="PUT" />}
             <input type="hidden" name="status" value={data.status} />
+            <input type="hidden" name="role" value={data.role} />
 
             <div className="grid gap-6 xl:grid-cols-[1fr_24rem]">
                 <Card className="rounded-lg">
@@ -328,6 +343,31 @@ export function UserForm({ mode, action, defaultAvatar, user }: UserFormProps) {
                             </div>
 
                             <div className="grid gap-2">
+                                <Label htmlFor="role">Role</Label>
+                                <Select
+                                    name="role"
+                                    value={data.role}
+                                    onValueChange={(value) =>
+                                        setData('role', value as RoleName)
+                                    }
+                                >
+                                    <SelectTrigger id="role" className="w-full">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {roles.map((role) => (
+                                            <SelectItem key={role} value={role}>
+                                                <span className="capitalize">
+                                                    {role}
+                                                </span>
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <InputError message={errors.role} />
+                            </div>
+
+                            <div className="grid gap-2">
                                 <Label htmlFor="password">Password</Label>
                                 <PasswordInput
                                     id="password"
@@ -407,7 +447,7 @@ export function UserForm({ mode, action, defaultAvatar, user }: UserFormProps) {
     );
 }
 
-export default function CreateUser({ defaultAvatar }: Props) {
+export default function CreateUser({ defaultAvatar, roles }: Props) {
     return (
         <>
             <Head title="Create User" />
@@ -423,6 +463,7 @@ export default function CreateUser({ defaultAvatar }: Props) {
                     mode="create"
                     action={store.url()}
                     defaultAvatar={defaultAvatar}
+                    roles={roles}
                 />
             </div>
         </>

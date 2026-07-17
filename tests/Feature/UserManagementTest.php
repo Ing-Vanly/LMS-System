@@ -1,9 +1,14 @@
 <?php
 
 use App\Models\User;
+use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
+
+beforeEach(function () {
+    $this->seed(RolePermissionSeeder::class);
+});
 
 test('authenticated users can manage login accounts', function () {
     $manager = User::factory()->create();
@@ -11,13 +16,19 @@ test('authenticated users can manage login accounts', function () {
     $this->actingAs($manager);
 
     $this->get(route('users.index'))->assertOk();
-    $this->get(route('users.create'))->assertOk();
+    $this->get(route('users.create'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('users/create')
+            ->where('roles', ['user', 'professor', 'admin'])
+            ->etc()
+        );
 
     $this->post(route('users.store'), [
         'name' => 'Jane Manager',
         'email' => 'jane@example.com',
         'phone' => '012345678',
         'status' => 'active',
+        'role' => 'professor',
         'password' => 'password',
         'password_confirmation' => 'password',
     ])->assertRedirect(route('users.index', absolute: false));
@@ -26,15 +37,23 @@ test('authenticated users can manage login accounts', function () {
 
     expect($created->phone)->toBe('012345678')
         ->and($created->status)->toBe('active')
+        ->and($created->hasExactRoles('professor'))->toBeTrue()
         ->and($created->email_verified_at)->not->toBeNull();
 
-    $this->get(route('users.edit', $created))->assertOk();
+    $this->get(route('users.edit', $created))
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('users/edit')
+            ->where('user.role', 'professor')
+            ->where('roles', ['user', 'professor', 'admin'])
+            ->etc()
+        );
 
     $this->put(route('users.update', $created), [
         'name' => 'Jane Updated',
         'email' => 'jane.updated@example.com',
         'phone' => null,
         'status' => 'inactive',
+        'role' => 'admin',
     ])->assertRedirect(route('users.index', absolute: false));
 
     $created->refresh();
@@ -42,7 +61,8 @@ test('authenticated users can manage login accounts', function () {
     expect($created->name)->toBe('Jane Updated')
         ->and($created->email)->toBe('jane.updated@example.com')
         ->and($created->phone)->toBeNull()
-        ->and($created->status)->toBe('inactive');
+        ->and($created->status)->toBe('inactive')
+        ->and($created->hasExactRoles('admin'))->toBeTrue();
 
     $this->delete(route('users.destroy', $created))
         ->assertRedirect(route('users.index', absolute: false));
@@ -72,6 +92,7 @@ test('users can upload an avatar for a login account', function () {
         'email' => 'avatar@example.com',
         'phone' => null,
         'status' => 'active',
+        'role' => 'user',
         'password' => 'password',
         'password_confirmation' => 'password',
         'avatar' => UploadedFile::fake()->image('avatar.jfif', 512, 512)->size(512),
@@ -104,6 +125,7 @@ test('users can upload an avatar to the public disk', function () {
         'email' => 'public-avatar@example.com',
         'phone' => null,
         'status' => 'active',
+        'role' => 'user',
         'password' => 'password',
         'password_confirmation' => 'password',
         'avatar' => UploadedFile::fake()->image('public-avatar.jpg', 512, 512)->size(512),
@@ -136,6 +158,7 @@ test('users can replace an avatar for a login account', function () {
         'email' => $user->email,
         'phone' => null,
         'status' => 'active',
+        'role' => 'professor',
         'avatar' => UploadedFile::fake()->image('new-avatar.jpg', 512, 512)->size(512),
     ])->assertRedirect(route('users.index', absolute: false));
 
@@ -161,6 +184,7 @@ test('unsupported avatars show a validation error', function () {
         'email' => 'no-avatar@example.com',
         'phone' => null,
         'status' => 'active',
+        'role' => 'user',
         'password' => 'password',
         'password_confirmation' => 'password',
         'avatar' => UploadedFile::fake()->create('avatar.txt', 1, 'text/plain'),

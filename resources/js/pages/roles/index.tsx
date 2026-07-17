@@ -1,10 +1,10 @@
 import { Head, Link, router } from '@inertiajs/react';
 import {
-    FolderOpen,
     MoreHorizontal,
     Pencil,
     Plus,
     Search,
+    Shield,
     Trash2,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -27,13 +27,6 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
-import {
     Table,
     TableBody,
     TableCell,
@@ -42,160 +35,102 @@ import {
     TableRow,
 } from '@/components/ui/table';
 
-const categoriesPath = '/categories';
+const rolesPath = '/roles';
 
-type Category = {
+type Role = {
     id: number;
     name: string;
-    slug: string;
-    description: string | null;
-    status: 'active' | 'inactive';
-    learning_materials_count: number;
+    permissions_count: number;
+    users_count: number;
     created_at_formatted: string | null;
 };
 
-type Filters = {
-    search: string;
-    status: 'all' | 'active' | 'inactive';
-};
-
-type PaginationLink = {
-    url: string | null;
-    label: string;
-    active: boolean;
-};
-
-type PaginatedCategories = {
-    data: Category[];
-    from: number | null;
-    to: number | null;
-    total: number;
-    links: PaginationLink[];
-};
-
 type Props = {
-    categories: PaginatedCategories;
-    filters: Filters;
+    roles: {
+        data: Role[];
+        from: number | null;
+        to: number | null;
+        total: number;
+        links: { url: string | null; label: string; active: boolean }[];
+    };
+    filters: { search: string };
 };
 
-function statusBadge(category: Category) {
-    return category.status === 'active' ? (
-        <Badge>Active</Badge>
-    ) : (
-        <Badge variant="secondary">Inactive</Badge>
-    );
-}
+const paginationLabel = (label: string) =>
+    label
+        .replace('&laquo; Previous', 'Previous')
+        .replace('Next &raquo;', 'Next');
 
-function paginationLabel(label: string) {
-    return label.replace('&laquo;', 'Previous').replace('&raquo;', 'Next');
-}
-
-export default function CategoriesIndex({ categories, filters }: Props) {
-    const [search, setSearch] = useState(filters.search ?? '');
-    const [status, setStatus] = useState<Filters['status']>(
-        filters.status ?? 'all',
-    );
+export default function RolesIndex({ roles, filters }: Props) {
+    const [search, setSearch] = useState(filters.search);
 
     useEffect(() => {
         const timeout = window.setTimeout(() => {
             router.get(
-                categoriesPath,
+                rolesPath,
+                { search: search || undefined },
                 {
-                    search: search || undefined,
-                    status: status === 'all' ? undefined : status,
-                },
-                {
-                    preserveState: true,
                     preserveScroll: true,
+                    preserveState: true,
                     replace: true,
                 },
             );
-        }, 300);
+        }, 250);
 
         return () => window.clearTimeout(timeout);
-    }, [search, status]);
+    }, [search]);
 
-    const destroyCategory = (category: Category) => {
-        if (
-            !window.confirm(
-                `Delete "${category.name}"? Categories with materials cannot be deleted.`,
-            )
-        ) {
+    const destroyRole = (role: Role) => {
+        if (!window.confirm(`Delete the "${role.name}" role?`)) {
             return;
         }
 
-        router.delete(`${categoriesPath}/${category.id}`, {
-            preserveScroll: true,
-        });
+        router.delete(`${rolesPath}/${role.id}`, { preserveScroll: true });
     };
 
     return (
         <>
-            <Head title="Categories" />
-
+            <Head title="Roles" />
             <div className="flex flex-col gap-6 p-4">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div>
-                        <h1 className="text-2xl font-semibold tracking-normal">
-                            Categories
-                        </h1>
+                        <h1 className="text-2xl font-semibold">Roles</h1>
                         <p className="text-sm text-muted-foreground">
-                            Organize the LMS content library.
+                            Group permissions and assign them to users.
                         </p>
                     </div>
-
                     <Button asChild>
-                        <Link href={`${categoriesPath}/create`}>
+                        <Link href={`${rolesPath}/create`}>
                             <Plus className="size-4" />
-                            New category
+                            New role
                         </Link>
                     </Button>
                 </div>
 
-                <div className="flex flex-col gap-3 md:flex-row md:items-center">
-                    <div className="relative w-full md:max-w-sm">
-                        <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                        <Input
-                            value={search}
-                            onChange={(event) => setSearch(event.target.value)}
-                            placeholder="Filter by name or description..."
-                            className="pl-9"
-                        />
-                    </div>
-
-                    <Select
-                        value={status}
-                        onValueChange={(value) =>
-                            setStatus(value as Filters['status'])
-                        }
-                    >
-                        <SelectTrigger className="w-full md:w-44">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">All statuses</SelectItem>
-                            <SelectItem value="active">Active</SelectItem>
-                            <SelectItem value="inactive">Inactive</SelectItem>
-                        </SelectContent>
-                    </Select>
+                <div className="relative w-full md:max-w-sm">
+                    <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                        value={search}
+                        onChange={(event) => setSearch(event.target.value)}
+                        placeholder="Filter roles..."
+                        className="pl-9"
+                    />
                 </div>
 
                 <Card className="gap-0 overflow-hidden rounded-lg py-0 shadow-none">
                     <CardHeader className="py-5">
-                        <CardTitle>Category list</CardTitle>
+                        <CardTitle>Role list</CardTitle>
                         <CardDescription>
-                            Review content groups and their material counts.
+                            Manage roles and their permission sets.
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="px-0">
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead className="pl-6">
-                                        Category
-                                    </TableHead>
-                                    <TableHead>Status</TableHead>
-                                    <TableHead>Materials</TableHead>
+                                    <TableHead className="pl-6">Role</TableHead>
+                                    <TableHead>Permissions</TableHead>
+                                    <TableHead>Users</TableHead>
                                     <TableHead>Created</TableHead>
                                     <TableHead className="pr-6 text-right">
                                         Actions
@@ -203,44 +138,38 @@ export default function CategoriesIndex({ categories, filters }: Props) {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {categories.data.length === 0 && (
+                                {roles.data.length === 0 && (
                                     <TableRow>
                                         <TableCell
                                             colSpan={5}
                                             className="h-32 text-center text-muted-foreground"
                                         >
-                                            No categories found.
+                                            No roles found.
                                         </TableCell>
                                     </TableRow>
                                 )}
-
-                                {categories.data.map((category) => (
-                                    <TableRow key={category.id}>
+                                {roles.data.map((role) => (
+                                    <TableRow key={role.id}>
                                         <TableCell className="pl-6">
                                             <div className="flex items-center gap-3">
                                                 <span className="flex size-10 items-center justify-center rounded-lg border bg-muted">
-                                                    <FolderOpen className="size-5 text-muted-foreground" />
+                                                    <Shield className="size-5 text-muted-foreground" />
                                                 </span>
-                                                <div className="min-w-0">
-                                                    <div className="font-medium">
-                                                        {category.name}
-                                                    </div>
-                                                    <div className="truncate text-sm text-muted-foreground">
-                                                        {category.description ||
-                                                            category.slug}
-                                                    </div>
-                                                </div>
+                                                <span className="font-medium capitalize">
+                                                    {role.name}
+                                                </span>
                                             </div>
                                         </TableCell>
                                         <TableCell>
-                                            {statusBadge(category)}
+                                            <Badge variant="outline">
+                                                {role.permissions_count}
+                                            </Badge>
                                         </TableCell>
                                         <TableCell className="text-muted-foreground">
-                                            {category.learning_materials_count}
+                                            {role.users_count}
                                         </TableCell>
                                         <TableCell className="text-muted-foreground">
-                                            {category.created_at_formatted ||
-                                                'N/A'}
+                                            {role.created_at_formatted ?? 'N/A'}
                                         </TableCell>
                                         <TableCell className="pr-6 text-right">
                                             <DropdownMenu>
@@ -251,15 +180,14 @@ export default function CategoriesIndex({ categories, filters }: Props) {
                                                     >
                                                         <MoreHorizontal className="size-4" />
                                                         <span className="sr-only">
-                                                            Open category
-                                                            actions
+                                                            Open role actions
                                                         </span>
                                                     </Button>
                                                 </DropdownMenuTrigger>
                                                 <DropdownMenuContent align="end">
                                                     <DropdownMenuItem asChild>
                                                         <Link
-                                                            href={`${categoriesPath}/${category.id}/edit`}
+                                                            href={`${rolesPath}/${role.id}/edit`}
                                                         >
                                                             <Pencil className="size-4" />
                                                             Edit
@@ -267,10 +195,11 @@ export default function CategoriesIndex({ categories, filters }: Props) {
                                                     </DropdownMenuItem>
                                                     <DropdownMenuItem
                                                         variant="destructive"
+                                                        disabled={
+                                                            role.users_count > 0
+                                                        }
                                                         onSelect={() =>
-                                                            destroyCategory(
-                                                                category,
-                                                            )
+                                                            destroyRole(role)
                                                         }
                                                     >
                                                         <Trash2 className="size-4" />
@@ -284,16 +213,14 @@ export default function CategoriesIndex({ categories, filters }: Props) {
                             </TableBody>
                         </Table>
                     </CardContent>
-                    <CardFooter className="flex flex-col gap-4 border-t px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+                    <CardFooter className="flex flex-col gap-4 border-t px-6 py-4 sm:flex-row sm:justify-between">
                         <p className="text-sm text-muted-foreground">
-                            Showing {categories.from ?? 0} to{' '}
-                            {categories.to ?? 0} of {categories.total}{' '}
-                            categories
+                            Showing {roles.from ?? 0} to {roles.to ?? 0} of{' '}
+                            {roles.total} roles
                         </p>
-
-                        {categories.links.length > 3 && (
-                            <div className="flex flex-wrap gap-2">
-                                {categories.links.map((link) =>
+                        {roles.links.length > 3 && (
+                            <div className="flex gap-2">
+                                {roles.links.map((link) =>
                                     link.url ? (
                                         <Button
                                             key={link.label}
@@ -329,11 +256,4 @@ export default function CategoriesIndex({ categories, filters }: Props) {
     );
 }
 
-CategoriesIndex.layout = {
-    breadcrumbs: [
-        {
-            title: 'Categories',
-            href: categoriesPath,
-        },
-    ],
-};
+RolesIndex.layout = { breadcrumbs: [{ title: 'Roles', href: rolesPath }] };

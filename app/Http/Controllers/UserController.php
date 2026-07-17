@@ -14,6 +14,7 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use Spatie\Permission\Models\Role;
 
 class UserController extends Controller
 {
@@ -46,6 +47,7 @@ class UserController extends Controller
 
         return Inertia::render('users/index', [
             'users' => User::query()
+                ->with('roles')
                 ->when($search !== '', function ($query) use ($search) {
                     $query->where(function ($query) use ($search) {
                         $query
@@ -76,6 +78,7 @@ class UserController extends Controller
     {
         return Inertia::render('users/create', [
             'defaultAvatar' => asset('images/user-default.svg'),
+            'roles' => $this->roles(),
         ]);
     }
 
@@ -86,7 +89,7 @@ class UserController extends Controller
     {
         $validated = $request->validate($this->rules());
 
-        User::query()->create([
+        $user = User::query()->create([
             'name' => $validated['name'],
             'email' => $validated['email'],
             'phone' => $validated['phone'] ?? null,
@@ -95,6 +98,8 @@ class UserController extends Controller
             'email_verified_at' => Carbon::now(),
             'password' => Hash::make($validated['password']),
         ]);
+
+        $user->assignRole($validated['role']);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('User created.')]);
 
@@ -106,9 +111,12 @@ class UserController extends Controller
      */
     public function edit(User $user): Response
     {
+        $user->load('roles');
+
         return Inertia::render('users/edit', [
             'user' => $this->userPayload($user),
             'defaultAvatar' => asset('images/user-default.svg'),
+            'roles' => $this->roles(),
         ]);
     }
 
@@ -136,6 +144,7 @@ class UserController extends Controller
         }
 
         $user->save();
+        $user->syncRoles([$validated['role']]);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('User updated.')]);
 
@@ -171,6 +180,7 @@ class UserController extends Controller
             'email' => ['required', 'string', 'lowercase', 'email', 'max:255', Rule::unique(User::class)->ignore($user)],
             'phone' => ['nullable', 'string', 'max:25'],
             'status' => ['required', Rule::in(['active', 'inactive'])],
+            'role' => ['required', Rule::exists('roles', 'name')->where('guard_name', 'web')],
             'password' => [$user ? 'nullable' : 'required', 'string', 'min:8', 'confirmed'],
             'avatar' => ['nullable', 'file', 'max:5120'],
         ];
@@ -244,11 +254,28 @@ class UserController extends Controller
             'email' => $user->email,
             'phone' => $user->phone,
             'status' => $user->status,
+            'role' => $user->getRoleNames()->first(),
             'avatar' => $user->avatar,
             'email_verified_at' => $user->email_verified_at?->toISOString(),
             'created_at' => $user->created_at?->toISOString(),
             'created_at_formatted' => $user->created_at?->format('M j, Y'),
             'is_current' => $request?->user()?->is($user) ?? false,
         ];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function roles(): array
+    {
+        $roles = Role::query()
+            ->where('guard_name', 'web')
+            ->orderByRaw("case name when 'user' then 1 when 'professor' then 2 when 'admin' then 3 else 4 end")
+            ->orderBy('name')
+            ->pluck('name')
+            ->map(fn (mixed $role): string => (string) $role)
+            ->all();
+
+        return array_values($roles);
     }
 }

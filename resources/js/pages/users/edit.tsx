@@ -3,14 +3,15 @@ import { Head } from '@inertiajs/react';
 import { index, update } from '@/routes/users';
 
 import { UserForm } from './create';
-import type { ManagedUserFormValue } from './create';
+import type { ManagedUserFormValue, RoleName } from './create';
 
 type Props = {
     user: ManagedUserFormValue;
     defaultAvatar: string;
+    roles: RoleName[];
 };
 
-export default function EditUser({ user, defaultAvatar }: Props) {
+export default function EditUser({ user, defaultAvatar, roles }: Props) {
     return (
         <>
             <Head title={`Edit ${user.name}`} />
@@ -27,6 +28,7 @@ export default function EditUser({ user, defaultAvatar }: Props) {
                     action={update.url(user.id)}
                     user={user}
                     defaultAvatar={defaultAvatar}
+                    roles={roles}
                 />
             </div>
         </>

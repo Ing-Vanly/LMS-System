@@ -258,7 +258,7 @@ export default function LearningMaterialsIndex({
                     </Select>
                 </div>
 
-                <Card className="gap-0 overflow-hidden rounded-lg py-0">
+                <Card className="gap-0 overflow-hidden rounded-lg py-0 shadow-none">
                     <CardHeader className="py-5">
                         <CardTitle>Material library</CardTitle>
                         <CardDescription>
