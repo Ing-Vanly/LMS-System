@@ -88,23 +88,31 @@ test('courses can be created directly inside a faculty program', function () {
         'name' => 'Digital Design Fundamentals',
         'code' => 'DMD101',
         'credits' => 3,
+        'year_level' => 2,
+        'semester_number' => 1,
         'description' => 'Introduction to digital design.',
     ])->assertRedirect();
 
     $course = Course::query()->where('code', 'DMD101')->firstOrFail();
 
     expect($course->program_id)->toBe($program->id)
-        ->and($course->name)->toBe('Digital Design Fundamentals');
+        ->and($course->name)->toBe('Digital Design Fundamentals')
+        ->and($course->year_level)->toBe(2)
+        ->and($course->semester_number)->toBe(1);
 
     $this->put(route('academic.programs.courses.update', [$program, $course]), [
         'name' => 'Digital Design Principles',
         'code' => 'DMD101',
         'credits' => 4,
+        'year_level' => 5,
+        'semester_number' => 2,
         'description' => 'Updated digital design course.',
     ])->assertRedirect();
 
     expect($course->refresh()->name)->toBe('Digital Design Principles')
-        ->and($course->credits)->toBe(4);
+        ->and($course->credits)->toBe(4)
+        ->and($course->year_level)->toBe(5)
+        ->and($course->semester_number)->toBe(2);
 
     $this->delete(route('academic.programs.courses.destroy', [$program, $course]))
         ->assertRedirect();

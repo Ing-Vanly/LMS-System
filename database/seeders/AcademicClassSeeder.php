@@ -74,6 +74,8 @@ class AcademicClassSeeder extends Seeder
                     'program_id' => $program->id,
                     'name' => $subject['name'],
                     'description' => "Lessons, learning materials, and classwork for {$subject['name']}.",
+                    'year_level' => 3,
+                    'semester_number' => 1,
                     'credits' => 3,
                 ],
             );

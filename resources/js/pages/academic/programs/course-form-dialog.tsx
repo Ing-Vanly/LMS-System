@@ -14,6 +14,13 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 
 type Program = {
@@ -28,6 +35,8 @@ export type CourseFormRecord = {
     name: string;
     credits: number;
     description: string | null;
+    year_level: number;
+    semester_number: number;
 };
 
 export function CourseFormDialog({
@@ -44,6 +53,8 @@ export function CourseFormDialog({
         name: course?.name ?? '',
         code: course?.code ?? '',
         credits: String(course?.credits ?? 3),
+        year_level: String(course?.year_level ?? 1),
+        semester_number: String(course?.semester_number ?? 1),
         description: course?.description ?? '',
     });
 
@@ -69,7 +80,7 @@ export function CourseFormDialog({
 
     return (
         <Dialog open onOpenChange={(open) => !open && onClose()}>
-            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
+            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
                 <form onSubmit={submit} className="space-y-6">
                     <DialogHeader>
                         <DialogTitle>
@@ -133,6 +144,76 @@ export function CourseFormDialog({
                                     {errors.credits}
                                 </p>
                             )}
+                        </div>
+
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            <div className="grid gap-2">
+                                <Label htmlFor="course-year-level">
+                                    Study year
+                                </Label>
+                                <Select
+                                    value={data.year_level}
+                                    onValueChange={(value) =>
+                                        setData('year_level', value)
+                                    }
+                                >
+                                    <SelectTrigger
+                                        id="course-year-level"
+                                        className="w-full"
+                                    >
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {[1, 2, 3, 4, 5].map((year) => (
+                                            <SelectItem
+                                                key={year}
+                                                value={String(year)}
+                                            >
+                                                Year {year}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                {errors.year_level && (
+                                    <p className="text-sm text-destructive">
+                                        {errors.year_level}
+                                    </p>
+                                )}
+                            </div>
+
+                            <div className="grid gap-2">
+                                <Label htmlFor="course-semester-number">
+                                    Semester
+                                </Label>
+                                <Select
+                                    value={data.semester_number}
+                                    onValueChange={(value) =>
+                                        setData('semester_number', value)
+                                    }
+                                >
+                                    <SelectTrigger
+                                        id="course-semester-number"
+                                        className="w-full"
+                                    >
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {[1, 2].map((semester) => (
+                                            <SelectItem
+                                                key={semester}
+                                                value={String(semester)}
+                                            >
+                                                Semester {semester}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                {errors.semester_number && (
+                                    <p className="text-sm text-destructive">
+                                        {errors.semester_number}
+                                    </p>
+                                )}
+                            </div>
                         </div>
 
                         <div className="grid gap-2">

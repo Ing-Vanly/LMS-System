@@ -120,6 +120,8 @@ class AcademicResourceController extends Controller
             'programs' => fn ($query) => $query
                 ->with(['courses' => fn ($query) => $query
                     ->withCount('offerings')
+                    ->orderBy('year_level')
+                    ->orderBy('semester_number')
                     ->orderBy('name')])
                 ->withCount(['courses', 'classGroups'])
                 ->orderBy('name'),
@@ -146,6 +148,8 @@ class AcademicResourceController extends Controller
                         'name' => $course->name,
                         'credits' => $course->credits,
                         'description' => $course->description,
+                        'year_level' => $course->year_level,
+                        'semester_number' => $course->semester_number,
                         'classes_count' => (int) $course->getAttribute('offerings_count'),
                     ])->values()->all(),
                 ])->values()->all(),
@@ -159,6 +163,8 @@ class AcademicResourceController extends Controller
             'name' => ['required', 'string', 'max:150'],
             'code' => ['required', 'string', 'max:30', Rule::unique('courses')],
             'credits' => ['required', 'integer', 'between:1,30'],
+            'year_level' => ['required', 'integer', 'between:1,5'],
+            'semester_number' => ['required', 'integer', 'between:1,2'],
             'description' => ['nullable', 'string', 'max:2000'],
         ]));
 
@@ -178,6 +184,8 @@ class AcademicResourceController extends Controller
             'name' => ['required', 'string', 'max:150'],
             'code' => ['required', 'string', 'max:30', Rule::unique('courses')->ignore($course->id)],
             'credits' => ['required', 'integer', 'between:1,30'],
+            'year_level' => ['required', 'integer', 'between:1,5'],
+            'semester_number' => ['required', 'integer', 'between:1,2'],
             'description' => ['nullable', 'string', 'max:2000'],
         ]));
 
@@ -238,7 +246,7 @@ class AcademicResourceController extends Controller
             'courses' => [
                 'title' => 'Courses', 'singular' => 'Course',
                 'description' => 'Manage reusable subjects in each program.',
-                'columns' => [['key' => 'code', 'label' => 'Code'], ['key' => 'name', 'label' => 'Course'], ['key' => 'parent', 'label' => 'Program'], ['key' => 'related', 'label' => 'Credits / Classes']],
+                'columns' => [['key' => 'code', 'label' => 'Code'], ['key' => 'name', 'label' => 'Course'], ['key' => 'parent', 'label' => 'Program'], ['key' => 'placement', 'label' => 'Curriculum'], ['key' => 'related', 'label' => 'Credits / Classes']],
             ],
             default => abort(404),
         };
@@ -273,6 +281,8 @@ class AcademicResourceController extends Controller
                 ['name' => 'name', 'label' => 'Course name', 'type' => 'text', 'placeholder' => 'Advanced PHP and MySQL'],
                 ['name' => 'code', 'label' => 'Code', 'type' => 'text', 'placeholder' => 'IT304'],
                 ['name' => 'program_id', 'label' => 'Program', 'type' => 'select', 'options' => $this->programOptions()],
+                ['name' => 'year_level', 'label' => 'Study year', 'type' => 'select', 'options' => $this->studyYearOptions()],
+                ['name' => 'semester_number', 'label' => 'Curriculum semester', 'type' => 'select', 'options' => $this->curriculumSemesterOptions()],
                 ['name' => 'credits', 'label' => 'Credits', 'type' => 'number', 'placeholder' => '3'],
                 ['name' => 'description', 'label' => 'Description', 'type' => 'textarea', 'placeholder' => 'Course summary and learning outcomes'],
             ],
@@ -309,6 +319,8 @@ class AcademicResourceController extends Controller
                 'name' => ['required', 'string', 'max:150'],
                 'code' => ['required', 'string', 'max:30', Rule::unique('courses')->ignore($record?->getKey())],
                 'program_id' => ['required', 'integer', 'exists:programs,id'],
+                'year_level' => ['required', 'integer', 'between:1,5'],
+                'semester_number' => ['required', 'integer', 'between:1,2'],
                 'credits' => ['required', 'integer', 'between:1,30'],
                 'description' => ['nullable', 'string', 'max:2000'],
             ],
@@ -360,7 +372,7 @@ class AcademicResourceController extends Controller
                 $record instanceof Program => ['id' => $record->id, 'code' => $record->code, 'name' => $record->name, 'parent' => $record->faculty->name, 'related' => $record->courses_count.' courses · '.$record->class_groups_count.' classes'],
                 $record instanceof AcademicYear => ['id' => $record->id, 'name' => $record->name, 'period' => $record->starts_at->format('M j, Y').' – '.$record->ends_at->format('M j, Y'), 'status' => $record->is_active ? 'Active' : 'Inactive', 'related' => $record->semesters_count.' semesters'],
                 $record instanceof Semester => ['id' => $record->id, 'name' => $record->name, 'parent' => $record->academicYear->name, 'period' => $record->starts_at->format('M j, Y').' – '.$record->ends_at->format('M j, Y'), 'related' => $record->class_groups_count.' classes'],
-                $record instanceof Course => ['id' => $record->id, 'code' => $record->code, 'name' => $record->name, 'parent' => $record->program->name, 'related' => $record->credits.' credits · '.$record->offerings_count.' classes'],
+                $record instanceof Course => ['id' => $record->id, 'code' => $record->code, 'name' => $record->name, 'parent' => $record->program->name, 'placement' => "Year {$record->year_level} · Semester {$record->semester_number}", 'related' => $record->credits.' credits · '.$record->offerings_count.' classes'],
                 default => throw new \LogicException('Unsupported academic model.'),
             },
             'form' => $this->formValues($resource, $record),
@@ -389,6 +401,27 @@ class AcademicResourceController extends Controller
     private function programOptions(): array
     {
         return Program::query()->orderBy('name')->get()->map(fn (Program $item) => ['value' => (string) $item->id, 'label' => "{$item->code} — {$item->name}"])->values()->all();
+    }
+
+    /** @return list<array{value: string, label: string}> */
+    private function studyYearOptions(): array
+    {
+        return [
+            ['value' => '1', 'label' => 'Year 1'],
+            ['value' => '2', 'label' => 'Year 2'],
+            ['value' => '3', 'label' => 'Year 3'],
+            ['value' => '4', 'label' => 'Year 4'],
+            ['value' => '5', 'label' => 'Year 5'],
+        ];
+    }
+
+    /** @return list<array{value: string, label: string}> */
+    private function curriculumSemesterOptions(): array
+    {
+        return [
+            ['value' => '1', 'label' => 'Semester 1'],
+            ['value' => '2', 'label' => 'Semester 2'],
+        ];
     }
 
     /** @return array<int, array{value: string, label: string}> */

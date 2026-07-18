@@ -62,6 +62,13 @@ type Props = {
 };
 
 const listPath = '/academic/programs';
+const semesterNumbers = [1, 2] as const;
+
+function studyYears(program: Program): number[] {
+    return [
+        ...new Set(program.courses.map((course) => course.year_level)),
+    ].sort((left, right) => left - right);
+}
 
 export default function FacultyProgramsShow({
     faculty,
@@ -187,93 +194,168 @@ export default function FacultyProgramsShow({
                             </div>
                         </CardHeader>
                         <CardContent className="border-t px-0">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead className="pl-6">
-                                            Code
-                                        </TableHead>
-                                        <TableHead>Course</TableHead>
-                                        <TableHead>Credits</TableHead>
-                                        <TableHead className="text-center">
-                                            Classes
-                                        </TableHead>
-                                        <TableHead className="pr-6 text-right">
-                                            Actions
-                                        </TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {program.courses.length === 0 && (
-                                        <TableRow>
-                                            <TableCell
-                                                colSpan={5}
-                                                className="h-24 text-center text-muted-foreground"
-                                            >
-                                                <BookOpen className="mx-auto mb-2 size-5" />
-                                                No courses in this program.
-                                            </TableCell>
-                                        </TableRow>
-                                    )}
-                                    {program.courses.map((course) => (
-                                        <TableRow key={course.id}>
-                                            <TableCell className="pl-6 font-medium">
-                                                {course.code}
-                                            </TableCell>
-                                            <TableCell>{course.name}</TableCell>
-                                            <TableCell>{course.credits}</TableCell>
-                                            <TableCell className="text-center text-muted-foreground">
-                                                {course.classes_count}
-                                            </TableCell>
-                                            <TableCell className="pr-6 text-right">
-                                                <DropdownMenu>
-                                                    <DropdownMenuTrigger asChild>
-                                                        <Button
-                                                            type="button"
-                                                            variant="ghost"
-                                                            size="icon"
-                                                        >
-                                                            <MoreHorizontal className="size-4" />
-                                                            <span className="sr-only">
-                                                                Open course
-                                                                actions
-                                                            </span>
-                                                        </Button>
-                                                    </DropdownMenuTrigger>
-                                                    <DropdownMenuContent align="end">
-                                                        <DropdownMenuItem
-                                                            onSelect={() =>
-                                                                setCourseForm({
-                                                                    program,
-                                                                    course,
-                                                                })
-                                                            }
-                                                        >
-                                                            <Pencil className="size-4" />
-                                                            Edit
-                                                        </DropdownMenuItem>
-                                                        <DropdownMenuItem
-                                                            variant="destructive"
-                                                            onSelect={() =>
-                                                                setDeleteTarget(
-                                                                    {
-                                                                        kind: 'course',
-                                                                        program,
+                            {program.courses.length === 0 ? (
+                                <div className="py-12 text-center text-muted-foreground">
+                                    <BookOpen className="mx-auto mb-2 size-5" />
+                                    No courses in this program.
+                                </div>
+                            ) : (
+                                studyYears(program).map((year) => (
+                                    <section
+                                        key={year}
+                                        className="border-b last:border-b-0"
+                                    >
+                                        <div className="border-b bg-muted/40 px-6 py-3">
+                                            <h3 className="font-semibold">
+                                                Year {year}
+                                            </h3>
+                                        </div>
+                                        <div className="grid divide-y lg:grid-cols-2 lg:divide-x lg:divide-y-0">
+                                            {semesterNumbers.map((semester) => {
+                                                const courses =
+                                                    program.courses.filter(
+                                                        (course) =>
+                                                            course.year_level ===
+                                                                year &&
+                                                            course.semester_number ===
+                                                                semester,
+                                                    );
+
+                                                return (
+                                                    <div
+                                                        key={semester}
+                                                        className="min-w-0"
+                                                    >
+                                                        <div className="border-b px-6 py-3 text-sm font-medium">
+                                                            Semester {semester}
+                                                        </div>
+                                                        <Table>
+                                                            <TableHeader>
+                                                                <TableRow>
+                                                                    <TableHead className="pl-6">
+                                                                        Code
+                                                                    </TableHead>
+                                                                    <TableHead>
+                                                                        Course
+                                                                    </TableHead>
+                                                                    <TableHead className="text-center">
+                                                                        Credits
+                                                                    </TableHead>
+                                                                    <TableHead className="text-center">
+                                                                        Classes
+                                                                    </TableHead>
+                                                                    <TableHead className="pr-6 text-right">
+                                                                        Actions
+                                                                    </TableHead>
+                                                                </TableRow>
+                                                            </TableHeader>
+                                                            <TableBody>
+                                                                {courses.length ===
+                                                                    0 && (
+                                                                    <TableRow>
+                                                                        <TableCell
+                                                                            colSpan={
+                                                                                5
+                                                                            }
+                                                                            className="h-20 text-center text-muted-foreground"
+                                                                        >
+                                                                            No
+                                                                            courses
+                                                                            assigned.
+                                                                        </TableCell>
+                                                                    </TableRow>
+                                                                )}
+                                                                {courses.map(
+                                                                    (
                                                                         course,
-                                                                    },
-                                                                )
-                                                            }
-                                                        >
-                                                            <Trash2 className="size-4" />
-                                                            Delete
-                                                        </DropdownMenuItem>
-                                                    </DropdownMenuContent>
-                                                </DropdownMenu>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
+                                                                    ) => (
+                                                                        <TableRow
+                                                                            key={
+                                                                                course.id
+                                                                            }
+                                                                        >
+                                                                            <TableCell className="pl-6 font-medium">
+                                                                                {
+                                                                                    course.code
+                                                                                }
+                                                                            </TableCell>
+                                                                            <TableCell>
+                                                                                {
+                                                                                    course.name
+                                                                                }
+                                                                            </TableCell>
+                                                                            <TableCell className="text-center">
+                                                                                {
+                                                                                    course.credits
+                                                                                }
+                                                                            </TableCell>
+                                                                            <TableCell className="text-center text-muted-foreground">
+                                                                                {
+                                                                                    course.classes_count
+                                                                                }
+                                                                            </TableCell>
+                                                                            <TableCell className="pr-6 text-right">
+                                                                                <DropdownMenu>
+                                                                                    <DropdownMenuTrigger
+                                                                                        asChild
+                                                                                    >
+                                                                                        <Button
+                                                                                            type="button"
+                                                                                            variant="ghost"
+                                                                                            size="icon"
+                                                                                        >
+                                                                                            <MoreHorizontal className="size-4" />
+                                                                                            <span className="sr-only">
+                                                                                                Open
+                                                                                                course
+                                                                                                actions
+                                                                                            </span>
+                                                                                        </Button>
+                                                                                    </DropdownMenuTrigger>
+                                                                                    <DropdownMenuContent align="end">
+                                                                                        <DropdownMenuItem
+                                                                                            onSelect={() =>
+                                                                                                setCourseForm(
+                                                                                                    {
+                                                                                                        program,
+                                                                                                        course,
+                                                                                                    },
+                                                                                                )
+                                                                                            }
+                                                                                        >
+                                                                                            <Pencil className="size-4" />
+                                                                                            Edit
+                                                                                        </DropdownMenuItem>
+                                                                                        <DropdownMenuItem
+                                                                                            variant="destructive"
+                                                                                            onSelect={() =>
+                                                                                                setDeleteTarget(
+                                                                                                    {
+                                                                                                        kind: 'course',
+                                                                                                        program,
+                                                                                                        course,
+                                                                                                    },
+                                                                                                )
+                                                                                            }
+                                                                                        >
+                                                                                            <Trash2 className="size-4" />
+                                                                                            Delete
+                                                                                        </DropdownMenuItem>
+                                                                                    </DropdownMenuContent>
+                                                                                </DropdownMenu>
+                                                                            </TableCell>
+                                                                        </TableRow>
+                                                                    ),
+                                                                )}
+                                                            </TableBody>
+                                                        </Table>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </section>
+                                ))
+                            )}
                         </CardContent>
                     </Card>
                 ))}
