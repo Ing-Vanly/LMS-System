@@ -32,7 +32,12 @@ import { dashboard } from '@/routes';
 import { index as usersIndex } from '@/routes/users';
 import type { NavItem } from '@/types';
 
-const mainNavItems: NavItem[] = [
+type NavigationGroup = {
+    label: string;
+    items: NavItem[];
+};
+
+const adminNavItems: NavItem[] = [
     {
         title: 'Dashboard',
         href: dashboard(),
@@ -121,6 +126,52 @@ const mainNavItems: NavItem[] = [
     },
 ];
 
+const professorNavItems: NavItem[] = [
+    {
+        title: 'My Classes',
+        href: '/classes',
+        icon: GraduationCap,
+    },
+    {
+        title: 'Learning Materials',
+        href: '/learning-materials',
+        icon: LibraryBig,
+        children: [
+            {
+                title: 'Categories',
+                href: '/categories',
+                icon: FolderOpen,
+            },
+            {
+                title: 'Learning Materials',
+                href: '/learning-materials',
+                icon: LibraryBig,
+            },
+        ],
+    },
+];
+
+const studentNavItems: NavItem[] = [
+    {
+        title: 'My Classes',
+        href: '/classes',
+        icon: GraduationCap,
+    },
+    {
+        title: 'Learning Library',
+        href: '/learning-library',
+        icon: MonitorPlay,
+    },
+];
+
+// These groups are intentionally all visible until role and permission checks
+// are added. Keeping the definitions separate makes that future filtering small.
+const navigationGroups: NavigationGroup[] = [
+    { label: 'Admin', items: adminNavItems },
+    { label: 'Professor', items: professorNavItems },
+    { label: 'Student', items: studentNavItems },
+];
+
 export function AppSidebar() {
     return (
         <Sidebar collapsible="icon" variant="inset">
@@ -137,7 +188,13 @@ export function AppSidebar() {
             </SidebarHeader>
 
             <SidebarContent>
-                <NavMain items={mainNavItems} />
+                {navigationGroups.map((group) => (
+                    <NavMain
+                        key={group.label}
+                        label={group.label}
+                        items={group.items}
+                    />
+                ))}
             </SidebarContent>
 
             <SidebarFooter>
