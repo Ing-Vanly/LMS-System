@@ -307,20 +307,29 @@ export default function ClassShow({ classroom }: Props) {
                                                         points
                                                     </span>
                                                 </div>
-                                                {assignment.subject
-                                                    .can_manage && (
-                                                    <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        asChild
-                                                    >
+                                                <div className="flex flex-wrap gap-2">
+                                                    <Button size="sm" asChild>
                                                         <Link
-                                                            href={`/academic/classes/${classroom.id}/subjects/${assignment.subject.id}/assignments/${assignment.id}/edit`}
+                                                            href={`/classes/${classroom.id}/subjects/${assignment.subject.id}/assignments/${assignment.id}`}
                                                         >
-                                                            Edit assignment
+                                                            View assignment
                                                         </Link>
                                                     </Button>
-                                                )}
+                                                    {assignment.subject
+                                                        .can_manage && (
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            asChild
+                                                        >
+                                                            <Link
+                                                                href={`/academic/classes/${classroom.id}/subjects/${assignment.subject.id}/assignments/${assignment.id}/edit`}
+                                                            >
+                                                                Edit assignment
+                                                            </Link>
+                                                        </Button>
+                                                    )}
+                                                </div>
                                             </CardContent>
                                         </Card>
                                     ))}

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AcademicResourceController;
 use App\Http\Controllers\AssignmentManagementController;
+use App\Http\Controllers\AssignmentWorkspaceController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\ClassGroupManagementController;
 use App\Http\Controllers\ClassroomController;
@@ -17,6 +18,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::inertia('dashboard', 'dashboard')->name('dashboard');
     Route::get('classes', [ClassroomController::class, 'index'])->name('classes.index');
     Route::get('classes/{classGroup}', [ClassroomController::class, 'show'])->name('classes.show');
+    Route::prefix('classes/{classGroup}/subjects/{courseOffering}/assignments/{assignment}')
+        ->name('classes.assignments.')
+        ->controller(AssignmentWorkspaceController::class)
+        ->group(function () {
+            Route::get('/', 'show')->name('show');
+            Route::post('submission', 'submit')->name('submission.submit');
+            Route::patch('submissions/{submission}/grade', 'grade')->name('submissions.grade');
+            Route::get('submissions/{submission}/attachment', 'attachment')
+                ->name('submissions.attachment');
+        });
     Route::prefix('academic/classes/{classGroup}/subjects/{courseOffering}/assignments')
         ->name('academic.assignments.')
         ->group(function () {

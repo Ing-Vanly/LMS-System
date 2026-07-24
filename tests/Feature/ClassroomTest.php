@@ -4,9 +4,11 @@ use App\Models\ClassGroup;
 use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
 use Inertia\Testing\AssertableInertia as Assert;
+use Tests\Support\AcademicClassFixture;
 
 beforeEach(function () {
     $this->seed(DatabaseSeeder::class);
+    AcademicClassFixture::create();
 });
 
 test('students can view their enrolled classes and class workspace', function () {

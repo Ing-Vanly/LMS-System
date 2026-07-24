@@ -10,9 +10,11 @@ use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Support\Facades\Route;
 use Inertia\Testing\AssertableInertia as Assert;
+use Tests\Support\AcademicClassFixture;
 
 beforeEach(function () {
     $this->seed(DatabaseSeeder::class);
+    AcademicClassFixture::create();
     $this->actingAs(User::query()->where('email', 'admin@gmail.com')->firstOrFail());
 });
 

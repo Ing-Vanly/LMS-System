@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
 /**
@@ -22,6 +23,13 @@ use Illuminate\Support\Carbon;
 #[Fillable(['course_offering_id', 'created_by', 'title', 'instructions', 'due_at', 'points', 'status'])]
 class Assignment extends Model
 {
+    protected static function booted(): void
+    {
+        static::deleting(function (Assignment $assignment): void {
+            $assignment->submissions()->get()->each->delete();
+        });
+    }
+
     protected function casts(): array
     {
         return ['due_at' => 'datetime'];
@@ -37,5 +45,11 @@ class Assignment extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /** @return HasMany<AssignmentSubmission, $this> */
+    public function submissions(): HasMany
+    {
+        return $this->hasMany(AssignmentSubmission::class);
     }
 }

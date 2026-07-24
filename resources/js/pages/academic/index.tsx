@@ -10,6 +10,7 @@ import {
 import type { FormEvent } from 'react';
 import { useEffect, useState } from 'react';
 
+import { DatePicker } from '@/components/date-picker';
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
@@ -67,6 +68,7 @@ type Field = {
     label: string;
     type: 'text' | 'date' | 'number' | 'textarea' | 'select';
     placeholder?: string;
+    defaultValue?: string;
     options?: { value: string; label: string }[];
 };
 
@@ -381,7 +383,10 @@ function AcademicResourceModal({
         Record<string, string | number | null>
     >(
         Object.fromEntries(
-            fields.map((field) => [field.name, record?.[field.name] ?? '']),
+            fields.map((field) => [
+                field.name,
+                record?.[field.name] ?? field.defaultValue ?? '',
+            ]),
         ),
     );
 
@@ -451,6 +456,16 @@ function AcademicResourceModal({
                                             ))}
                                         </SelectContent>
                                     </Select>
+                                ) : field.type === 'date' ? (
+                                    <DatePicker
+                                        id={`modal-${field.name}`}
+                                        value={String(data[field.name] ?? '')}
+                                        onChange={(value) =>
+                                            setData(field.name, value)
+                                        }
+                                        invalid={Boolean(errors[field.name])}
+                                        required
+                                    />
                                 ) : field.type === 'textarea' ? (
                                     <textarea
                                         id={`modal-${field.name}`}

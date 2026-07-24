@@ -53,6 +53,9 @@ class DatabaseSeeder extends Seeder
 
         $this->call(FacultySeeder::class);
         $this->call(ProgramSeeder::class);
-        $this->call(AcademicClassSeeder::class);
+        $this->call(ScienceTechnologyCourseSeeder::class);
+
+        // Disabled temporarily:
+        // $this->call(BusinessAdministrationCourseSeeder::class);
     }
 }

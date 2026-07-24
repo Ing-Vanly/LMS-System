@@ -1,6 +1,6 @@
 <?php
 
-namespace Database\Seeders;
+namespace Tests\Support;
 
 use App\Models\AcademicYear;
 use App\Models\Assignment;
@@ -11,11 +11,10 @@ use App\Models\Faculty;
 use App\Models\Program;
 use App\Models\Semester;
 use App\Models\User;
-use Illuminate\Database\Seeder;
 
-class AcademicClassSeeder extends Seeder
+final class AcademicClassFixture
 {
-    public function run(): void
+    public static function create(): ClassGroup
     {
         $faculty = Faculty::query()->updateOrCreate(
             ['code' => 'FST'],
@@ -24,7 +23,10 @@ class AcademicClassSeeder extends Seeder
 
         $program = Program::query()->updateOrCreate(
             ['code' => 'BIT'],
-            ['faculty_id' => $faculty->id, 'name' => 'Bachelor of Science in Information Technology'],
+            [
+                'faculty_id' => $faculty->id,
+                'name' => 'Bachelor of Science in Information Technology',
+            ],
         );
 
         $academicYear = AcademicYear::query()->updateOrCreate(
@@ -58,24 +60,17 @@ class AcademicClassSeeder extends Seeder
             $classGroup->students()->syncWithoutDetaching([$student->id]);
         }
 
-        $subjects = [
-            ['code' => 'IT301', 'name' => 'Oracle Project', 'room' => 'Lab 301'],
-            ['code' => 'IT302', 'name' => 'Client Server Application Development', 'room' => 'Lab 302'],
-            ['code' => 'IT303', 'name' => 'Blockchain Technology', 'room' => 'Room 204'],
-            ['code' => 'IT304', 'name' => 'Advanced PHP and MySQL', 'room' => 'Lab 304'],
-            ['code' => 'IT305', 'name' => 'Network Administration', 'room' => 'Lab 305'],
-            ['code' => 'IT306', 'name' => 'Network Design and Implementation', 'room' => 'Lab 306'],
-        ];
-
-        foreach ($subjects as $index => $subject) {
+        foreach (self::subjects() as $index => $subject) {
             $course = Course::query()->updateOrCreate(
-                ['code' => $subject['code']],
                 [
                     'program_id' => $program->id,
-                    'name' => $subject['name'],
-                    'description' => "Lessons, learning materials, and classwork for {$subject['name']}.",
+                    'code' => $subject['code'],
                     'year_level' => 3,
                     'semester_number' => 1,
+                ],
+                [
+                    'name' => $subject['name'],
+                    'description' => "Lessons, learning materials, and classwork for {$subject['name']}.",
                     'credits' => 3,
                 ],
             );
@@ -87,10 +82,13 @@ class AcademicClassSeeder extends Seeder
 
             if ($index < 3) {
                 Assignment::query()->updateOrCreate(
-                    ['course_offering_id' => $offering->id, 'title' => $this->assignmentTitle($index)],
+                    [
+                        'course_offering_id' => $offering->id,
+                        'title' => self::assignmentTitle($index),
+                    ],
                     [
                         'created_by' => $professor?->id,
-                        'instructions' => $this->assignmentInstructions($index),
+                        'instructions' => self::assignmentInstructions($index),
                         'due_at' => now()->addDays(($index + 1) * 5)->setTime(23, 59),
                         'points' => 100,
                         'status' => 'published',
@@ -98,9 +96,26 @@ class AcademicClassSeeder extends Seeder
                 );
             }
         }
+
+        return $classGroup;
     }
 
-    private function assignmentTitle(int $index): string
+    /**
+     * @return list<array{code: string, name: string, room: string}>
+     */
+    private static function subjects(): array
+    {
+        return [
+            ['code' => 'IT301', 'name' => 'Oracle Project', 'room' => 'Lab 301'],
+            ['code' => 'IT302', 'name' => 'Client Server Application Development', 'room' => 'Lab 302'],
+            ['code' => 'IT303', 'name' => 'Blockchain Technology', 'room' => 'Room 204'],
+            ['code' => 'IT304', 'name' => 'Advanced PHP and MySQL', 'room' => 'Lab 304'],
+            ['code' => 'IT305', 'name' => 'Network Administration', 'room' => 'Lab 305'],
+            ['code' => 'IT306', 'name' => 'Network Design and Implementation', 'room' => 'Lab 306'],
+        ];
+    }
+
+    private static function assignmentTitle(int $index): string
     {
         return [
             'Database Design Project',
@@ -109,7 +124,7 @@ class AcademicClassSeeder extends Seeder
         ][$index];
     }
 
-    private function assignmentInstructions(int $index): string
+    private static function assignmentInstructions(int $index): string
     {
         return [
             'Design the database schema and submit the SQL script with an ER diagram.',

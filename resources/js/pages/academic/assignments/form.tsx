@@ -2,6 +2,7 @@ import { Head, Link, router, useForm } from '@inertiajs/react';
 import { Save, Trash2 } from 'lucide-react';
 import type { FormEvent } from 'react';
 
+import { DatePicker } from '@/components/date-picker';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
 import {
@@ -129,13 +130,15 @@ export default function AssignmentForm({ assignment, context }: Props) {
                             </div>
                             <div className="grid gap-2">
                                 <Label htmlFor="due_at">Due date</Label>
-                                <Input
+                                <DatePicker
                                     id="due_at"
-                                    type="datetime-local"
                                     value={data.due_at}
-                                    onChange={(event) =>
-                                        setData('due_at', event.target.value)
+                                    onChange={(value) =>
+                                        setData('due_at', value)
                                     }
+                                    placeholder="Pick a due date"
+                                    invalid={Boolean(errors.due_at)}
+                                    includeTime
                                 />
                                 <InputError message={errors.due_at} />
                             </div>

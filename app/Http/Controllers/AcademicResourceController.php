@@ -161,7 +161,15 @@ class AcademicResourceController extends Controller
     {
         $program->courses()->create($request->validate([
             'name' => ['required', 'string', 'max:150'],
-            'code' => ['required', 'string', 'max:30', Rule::unique('courses')],
+            'code' => [
+                'required',
+                'string',
+                'max:30',
+                Rule::unique('courses')
+                    ->where('program_id', $program->id)
+                    ->where('year_level', $request->input('year_level'))
+                    ->where('semester_number', $request->input('semester_number')),
+            ],
             'credits' => ['required', 'integer', 'between:1,30'],
             'year_level' => ['required', 'integer', 'between:1,5'],
             'semester_number' => ['required', 'integer', 'between:1,2'],
@@ -182,7 +190,16 @@ class AcademicResourceController extends Controller
 
         $course->update($request->validate([
             'name' => ['required', 'string', 'max:150'],
-            'code' => ['required', 'string', 'max:30', Rule::unique('courses')->ignore($course->id)],
+            'code' => [
+                'required',
+                'string',
+                'max:30',
+                Rule::unique('courses')
+                    ->where('program_id', $program->id)
+                    ->where('year_level', $request->input('year_level'))
+                    ->where('semester_number', $request->input('semester_number'))
+                    ->ignore($course->id),
+            ],
             'credits' => ['required', 'integer', 'between:1,30'],
             'year_level' => ['required', 'integer', 'between:1,5'],
             'semester_number' => ['required', 'integer', 'between:1,2'],
@@ -269,7 +286,7 @@ class AcademicResourceController extends Controller
                 ['name' => 'name', 'label' => 'Academic year', 'type' => 'text', 'placeholder' => '2026-2027'],
                 ['name' => 'starts_at', 'label' => 'Start date', 'type' => 'date'],
                 ['name' => 'ends_at', 'label' => 'End date', 'type' => 'date'],
-                ['name' => 'is_active', 'label' => 'Status', 'type' => 'select', 'options' => [['value' => '1', 'label' => 'Active'], ['value' => '0', 'label' => 'Inactive']]],
+                ['name' => 'is_active', 'label' => 'Status', 'type' => 'select', 'defaultValue' => '1', 'options' => [['value' => '1', 'label' => 'Active'], ['value' => '0', 'label' => 'Inactive']]],
             ],
             'semesters' => [
                 ['name' => 'name', 'label' => 'Semester name', 'type' => 'text', 'placeholder' => 'Semester 1'],
@@ -317,7 +334,16 @@ class AcademicResourceController extends Controller
             ],
             'courses' => [
                 'name' => ['required', 'string', 'max:150'],
-                'code' => ['required', 'string', 'max:30', Rule::unique('courses')->ignore($record?->getKey())],
+                'code' => [
+                    'required',
+                    'string',
+                    'max:30',
+                    Rule::unique('courses')
+                        ->where('program_id', request()->input('program_id'))
+                        ->where('year_level', request()->input('year_level'))
+                        ->where('semester_number', request()->input('semester_number'))
+                        ->ignore($record?->getKey()),
+                ],
                 'program_id' => ['required', 'integer', 'exists:programs,id'],
                 'year_level' => ['required', 'integer', 'between:1,5'],
                 'semester_number' => ['required', 'integer', 'between:1,2'],
